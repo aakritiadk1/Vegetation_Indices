@@ -21,6 +21,9 @@ def save_data(out_dir, image, filename, ROI):
         
     elif basename == 'sentinel':
         geemap.download_ee_image(image, filename = file_dir, scale=10, region=ROI, crs='EPSG:4326')
+        
+    elif basename == 'LULC':
+        geemap.download_ee_image(image, filename = file_dir, scale= 10, region=ROI, crs='EPSG:4326')
     
 # %%
 def get_eesupported_roi(shp_file):
@@ -30,6 +33,14 @@ def get_eesupported_roi(shp_file):
     roi_geojson = roi_geom.__geo_interface__
     roi_ee = ee.Geometry(roi_geojson)
     return roi_ee
+
+#%%
+def get_lulc(roi_ee):
+    dataset = ee.ImageCollection('GOOGLE/DYNAMICWORLD/V1').filterDate('2022-04-01', '2022-07-01')
+    # Clip the image with the region of interest.
+    dw_image = ee.Image(dataset.mosaic()).clip(roi_ee)
+    classification = dw_image.select('label')
+    return classification
 
 #%%
 L = 0.5
