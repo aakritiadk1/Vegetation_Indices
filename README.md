@@ -1,6 +1,6 @@
-# Vegetation Index Comparison Across Landsat 8, Landsat 9, and Sentinel 2
+# Vegetation Index Comparison Across Landsat 8 and Landsat 9
 
-This repository compares vegetation indexes derived from Landsat 8, Landsat 9, and Sentinel 2 optical satellite imagery. It includes definitions, formulations, and implementations of these indexes for each satellite platform.
+This repository compares vegetation indexes derived from Landsat 8 and Landsat 9 optical satellite imagery. It includes definitions, formulations, and implementations of these indexes for each satellite platform.
 
 ## Project Structure
 
