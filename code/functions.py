@@ -11,6 +11,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from rasterio.plot import show
 from pathlib import Path
 from skimage.transform import resize
+from matplotlib_scalebar.scalebar import ScaleBar
 #%%
 #to save the data collection
 def save_data(out_dir, image, filename, ROI):
@@ -63,7 +64,7 @@ def read_raster(raster_path, data_dir):
             green = np.where(np.isnan(green), np.nanmean(green), green)
             
             
-            print("Calculation of NDVI, EVI, NDWI in progress... of the raster file: {basename} ")
+            print("Calculation oqf NDVI, EVI, NDWI in progress... of the raster file: {basename} ")
             #NDVI Calculation
             ndvi = (nir - red) / (nir + red)
             
@@ -108,28 +109,40 @@ def save_raster(output_path, data, src):
         print(f"Raster file saved at: {output_path}")
 # %%
 import os
+import re
 import matplotlib.pyplot as plt
 import rasterio
 from skimage.transform import resize
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 # Enable LaTeX font rendering
-plt.rc('text', usetex=True)
-plt.rc('font', family='serif')
+plt.rcParams['font.family'] = 'serif'
+plt.rcParams['font.serif'] = ['Times New Roman']
 
 def plot_rasters_with_custom_titles(data_dir, custom_titles, colorbar_label, output):
     # Get all .tif files in the directory
     tif_files = [os.path.join(data_dir, file) for file in os.listdir(data_dir) if file.endswith('.tif')]
 
+    # Extract the Landsat number from the filename and sort the files accordingly
+    tif_files.sort(key=lambda x: int(re.search(r'(\d+)', os.path.basename(x)).group()))
+
+    # Compute the global min and max values across all images
+    global_min = float('inf')
+    global_max = float('-inf')
+    for tif_file in tif_files:
+        dataset = rasterio.open(tif_file)
+        raster_data = dataset.read(1)
+        global_min = min(global_min, raster_data.min())
+        global_max = max(global_max, raster_data.max())
+        dataset.close()
+
     # Plotting the rasters
     num_images = len(tif_files)
     cols = 2  
     rows = (num_images + 1) // cols  
-
-    # Define the target size for all images
     target_size = (512, 512) 
 
-    fig, axs = plt.subplots(rows, cols, figsize=(8, 4 * rows))
+    fig, axs = plt.subplots(rows, cols, figsize=(6, 3 * rows), gridspec_kw={'hspace': 0.3, 'wspace': 0.1})
 
     for i, tif_file in enumerate(tif_files):
         row = i // cols
@@ -140,37 +153,46 @@ def plot_rasters_with_custom_titles(data_dir, custom_titles, colorbar_label, out
         raster_data = dataset.read(1)
         bounds = dataset.bounds
         extent = [bounds.left, bounds.right, bounds.bottom, bounds.top]
+        
         # Resize raster data to target size
         raster_resized = resize(raster_data, target_size, mode='reflect', anti_aliasing=True)
         
-        img = ax.imshow(raster_resized, cmap='terrain', extent=extent)
-        ax.set_title(rf'{custom_titles[i]}', fontsize=12)
+        # Use the global min and max for consistent color mapping
+        img = ax.imshow(raster_resized, cmap='terrain', extent=extent, vmin=global_min, vmax=global_max)
+        ax.set_title(rf'{custom_titles[i]}', fontsize=10)
         
         # Set x and y labels
-        ax.set_xlabel('Longitude', fontsize=10)
+        ax.set_xlabel('Longitude', fontsize=9)
         if col == 0: 
-            ax.set_ylabel('Latitude', fontsize=10)
+            ax.set_ylabel('Latitude', fontsize=9)
         else:
             ax.set_ylabel('')
+            ax.set_yticklabels([]) 
         
         ax.yaxis.set_tick_params(rotation=90)
         
         # Adjust tick label sizes
-        ax.tick_params(axis='both', which='major', labelsize=8)
-        ax.tick_params(axis='both', which='minor', labelsize=8) 
-        
-        # Add colorbar to each image
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes("right", size="5%", pad=0.1)
-        colorbar = plt.colorbar(img, cax=cax, orientation='vertical')
-        
-        # Set colorbar label conditionally
-        if col == 1:  # Only set colorbar label for the second plot in each row
-            colorbar.set_label(colorbar_label)
-        else:
-            colorbar.set_label('')  # Remove label for the first plot in each row
+        ax.tick_params(axis='both', which='major', labelsize=7)
+        ax.tick_params(axis='both', which='minor', labelsize=7) 
+
+        # Calculate the approximate scale in meters at the center latitude
+        center_latitude = (bounds.top + bounds.bottom) / 2
+        meters_per_degree_lat, meters_per_degree_lon = degree_to_meters(center_latitude)
+        mean_meters_per_degree = (meters_per_degree_lat + meters_per_degree_lon) / 2
+
+        # Add scale bar 
+        scalebar = ScaleBar(mean_meters_per_degree, units='m', dimension='si-length', 
+                            location='lower right', pad=0.1, font_properties={'size': 7})
+        ax.add_artist(scalebar)
         
         dataset.close()
+        
+        # Add a single color bar after the second image in each row
+        if col == 1:
+            cax = fig.add_axes([ax.get_position().x1 + 0.005, ax.get_position().y0, 0.015, ax.get_position().height])
+            colorbar = plt.colorbar(img, cax=cax, orientation='vertical')
+            colorbar.set_label(colorbar_label, rotation=90)
+            colorbar.ax.tick_params(labelsize=7)
         
     # Save the plot
     plt.savefig(output, dpi=400, bbox_inches='tight')
@@ -178,6 +200,12 @@ def plot_rasters_with_custom_titles(data_dir, custom_titles, colorbar_label, out
     # Adjust layout
     plt.tight_layout()
     plt.show()
+
+def degree_to_meters(latitude):
+    # Approximation: 1 degree latitude ~ 111 km
+    meters_per_degree = 111e3
+    meters_per_degree_lon = meters_per_degree * np.cos(np.radians(latitude))
+    return meters_per_degree, meters_per_degree_lon
 #%%
 def sample_raster_values(file_path):
     # Open the raster file
