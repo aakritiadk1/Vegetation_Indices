@@ -44,7 +44,9 @@ def get_lulc(roi_ee):
     return classification
 
 #%%
+# Define a constant for the L parameter used in SAVI calculation
 L = 0.5
+
 def read_raster(raster_path, data_dir):
     with rasterio.open(raster_path) as src:
         profile = src.profile
@@ -63,50 +65,52 @@ def read_raster(raster_path, data_dir):
             blue = np.where(np.isnan(blue), np.nanmean(blue), blue)
             green = np.where(np.isnan(green), np.nanmean(green), green)
             
+            print(f"Calculation of NDVI, EVI, NDWI, and SAVI in progress for: {basename}")
             
-            print("Calculation oqf NDVI, EVI, NDWI in progress... of the raster file: {basename} ")
-            #NDVI Calculation
+            # NDVI Calculation
             ndvi = (nir - red) / (nir + red)
             
-            #Calculate EVI
+            # Calculate EVI
             evi = 2.5 * ((nir - red) / (nir + 6 * red - 7.5 * blue + 1))
             
-            #Calculate NDWI
+            # Calculate NDWI
             ndwi = (green - nir) / (green + nir)
             
             # Calculate SAVI
             savi = ((nir - red) * (1 + L)) / (nir + red + L)
             
-            # Create NDVI, EVI, NDWI folders inside the data directory if they don't exist
-            ndvi_dir = data_dir / 'NDVI'
-            evi_dir = data_dir / 'EVI'
-            ndwi_dir = data_dir / 'NDWI'
-            savi_dir = data_dir / 'SAVI'
+            # Create metric folders inside the current folder if they don't exist
+            metric_dirs = ['NDVI', 'EVI', 'NDWI', 'SAVI']
+            for metric in metric_dirs:
+                metric_dir = Path(data_dir) / metric
+                os.makedirs(metric_dir, exist_ok=True)
             
-            os.makedirs(ndvi_dir, exist_ok=True)
-            os.makedirs(evi_dir, exist_ok=True)
-            os.makedirs(ndwi_dir, exist_ok=True)
-            os.makedirs(savi_dir, exist_ok=True)
+            # Save NDVI, EVI, NDWI, and SAVI raster files
+            ndvi_path = Path(data_dir) / 'NDVI' / f'{basename}NDVI.tif'
+            evi_path = Path(data_dir) / 'EVI' / f'{basename}EVI.tif'
+            ndwi_path = Path(data_dir) / 'NDWI' / f'{basename}NDWI.tif'
+            savi_path = Path(data_dir) / 'SAVI' / f'{basename}SAVI.tif'
             
-            # Save NDVI, EVI, NDWI raster files
-            ndvi_path = ndvi_dir / f'{basename}NDVI.tif'
-            evi_path = evi_dir / f'{basename}EVI.tif'
-            ndwi_path = ndwi_dir / f'{basename}NDWI.tif'
-            savi_path = savi_dir / f'{basename}SAVI.tif'
-
-            
-            #Call the save_raster function to save the raster files
+            # Call the save_raster function to save the raster files
             save_raster(ndvi_path, ndvi, src)
             save_raster(evi_path, evi, src)
             save_raster(ndwi_path, ndwi, src)  
-            save_raster(savi_path, savi, src)      
-            
+            save_raster(savi_path, savi, src)  
+
 def save_raster(output_path, data, src):
     profile = src.profile
     profile.update(dtype=rasterio.float32, count=1)
     with rasterio.open(output_path, 'w', **profile) as dst:
         dst.write(data.astype(rasterio.float32), 1)
         print(f"Raster file saved at: {output_path}")
+
+def process_all_folders(main_folder):
+    for root, dirs, files in os.walk(main_folder):
+        for file in files:
+            if file.endswith('.tif'):
+                raster_path = Path(root) / file
+                print(f'Processing {raster_path}...')
+                read_raster(raster_path, root)
 # %%
 import os
 import re
@@ -207,6 +211,11 @@ def degree_to_meters(latitude):
     meters_per_degree_lon = meters_per_degree * np.cos(np.radians(latitude))
     return meters_per_degree, meters_per_degree_lon
 #%%
+import os
+import rasterio
+import numpy as np
+import pandas as pd
+
 def sample_raster_values(file_path):
     # Open the raster file
     src = rasterio.open(file_path)
@@ -246,30 +255,47 @@ def sample_raster_values(file_path):
     
     return sampled_values
 
-def process_raster_directory(directory):
-    # Initialize a dictionary to store sampled values for each raster file
-    sampled_data = {}
-    
-    # Iterate over files in the directory
-    for filename in os.listdir(directory):
-        if filename.endswith(".tif"):
-            file_path = os.path.join(directory, filename)
+def process_raster_directory(main_directory):
+    # Iterate over vegetation index folders
+    for veg_index_folder in os.listdir(main_directory):
+        veg_index_path = os.path.join(main_directory, veg_index_folder)
+        
+        if os.path.isdir(veg_index_path):
+            sampled_data = {}
+
+            # Iterate over season subfolders
+            for season_folder in os.listdir(veg_index_path):
+                season_path = os.path.join(veg_index_path, season_folder)
+                
+                if os.path.isdir(season_path):
+                    # Initialize lists to store sampled values for Landsat 8 and 9
+                    landsat_8_values = []
+                    landsat_9_values = []
+                    
+                    # Iterate over .tif files in the season folder
+                    for filename in os.listdir(season_path):
+                        if filename.endswith(".tif"):
+                            file_path = os.path.join(season_path, filename)
+                            
+                            # Sample values for the raster file
+                            sampled_values = sample_raster_values(file_path)
+                            
+                            # Store sampled values in the correct list based on Landsat number
+                            if 'landsat_8' in filename.lower():
+                                landsat_8_values.extend(sampled_values)
+                            elif 'landsat_9' in filename.lower():
+                                landsat_9_values.extend(sampled_values)
+                    
+                    # Add sampled values to the dictionary
+                    sampled_data[f'{season_folder}_landsat_8'] = landsat_8_values
+                    sampled_data[f'{season_folder}_landsat_9'] = landsat_9_values
             
-            # Sample values for the raster file
-            sampled_values = sample_raster_values(file_path)
+            # Create a DataFrame
+            df = pd.DataFrame(sampled_data)
             
-            # Use filename without extension as column name
-            column_name = os.path.splitext(filename)[0]
+            # Save to CSV in the vegetation index folder
+            output_csv = os.path.join(veg_index_path, f'{veg_index_folder}_sampled.csv')
+            df.to_csv(output_csv, index=False)
             
-            # Store sampled values in dictionary
-            sampled_data[column_name] = sampled_values
-    
-    # Create a DataFrame
-    df = pd.DataFrame(sampled_data)
-    
-    # Save to CSV in the same directory
-    output_csv = os.path.join(directory, 'Sampled.csv')
-    df.to_csv(output_csv, index=False)
-    
-    print(f"Sampled values saved to {output_csv}")
+            print(f"Sampled values saved to {output_csv}")
 # %%
