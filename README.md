@@ -26,7 +26,7 @@ For this study, one small study area with 70.5 Km2   is selected for the cross-c
 
 ### WorkFlow
 The complete methodology followed in this research is shown in the chart below. 
-<img src="https://github.com/supathdhitalGEO/Vegetation_Indices/blob/main/Image/Workflow.png"/>
+<img src="https://github.com/supathdhitalGEO/Vegetation_Indices/blob/main/Image/Workflow_Diagram.png"/>
 
 ### Correlation between the vegetation indices in different seasons
 <img src = "https://github.com/supathdhitalGEO/Vegetation_Indices/blob/main/Image/vegetation_correlation1.png"/>
